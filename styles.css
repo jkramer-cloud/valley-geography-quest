@@ -16,3 +16,35 @@
 .regionPin .pinIcon{font-size:5px;fill:#ffffff;stroke:#073047;stroke-width:.45px;paint-order:stroke}
 .regionPin.place .pinIcon{fill:#ffe6a6}
 @media(max-width:650px){.map-area{padding-top:78px}}
+
+/* V3: deliberate round start and optional visual retrieval map. */
+.round-ready{display:flex;align-items:center;gap:20px;margin:13px 18px 5px;padding:19px 21px;background:linear-gradient(115deg,var(--panel2),var(--panel));border:2px solid var(--a);border-radius:17px;box-shadow:0 0 0 4px color-mix(in srgb,var(--a) 8%,transparent)}
+.round-ready[hidden]{display:none!important}
+.ready-icon{font-size:46px;line-height:1;color:var(--a);opacity:.78}
+.ready-content{flex:1;min-width:180px}
+.ready-content h3{font-size:clamp(18px,2.3vw,26px);margin:3px 0 7px}
+.ready-content p{font-size:13px;margin:4px 0;color:var(--text)}
+.ready-content .ready-detail{color:var(--muted);font-size:12px}
+button.start-round{font-size:17px;padding:15px 22px;white-space:nowrap;box-shadow:0 7px 23px #0005}
+.mapHUD.ready .hudClock strong{color:#ffda92;font-size:30px}
+.state.review-correct{fill:#208963;stroke:#c2ffe0;stroke-width:2.2}
+.state.review-wrong{fill:#9e404c;stroke:#ffd2da;stroke-width:2.2}
+.state.review-correct:hover,.state.review-wrong:hover{filter:brightness(1.18)}
+.reviewMark{pointer-events:none}
+.reviewMark circle{stroke:#fff;stroke-width:1.7;fill:#087850}
+.reviewMark.missed circle{fill:#ad364d}
+.reviewMark text{fill:#fff;stroke:#064130;stroke-width:.6px;paint-order:stroke;font-family:Arial,sans-serif;font-size:16px;font-weight:900;text-anchor:middle;dominant-baseline:middle}
+.reviewMark.missed text{stroke:#68232e}
+@media(max-width:750px){.round-ready{flex-wrap:wrap;margin:10px;padding:13px}.ready-icon{display:none}button.start-round{width:100%}}
+@media(prefers-reduced-motion:reduce){.state,.round-ready,button{transition:none!important}}
+/* Keep form controls and the scrolling mode list inside narrow phone screens. */
+.layout,.sidebar,main,.playPanel,.sidePanel,.sidePanel label,.mode-list{min-width:0}
+.mode-list{max-width:100%}
+.sidePanel{grid-template-columns:repeat(4,minmax(0,1fr))}
+@media(max-width:650px){
+ .layout{grid-template-columns:minmax(0,1fr)}
+ .sidePanel{grid-template-columns:repeat(2,minmax(0,1fr))}
+ .sidePanel label{min-width:0}
+ .sidePanel select{width:100%;min-width:0}
+ .map-area svg{min-width:0}
+}
