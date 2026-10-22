@@ -1,55 +1,164 @@
 'use strict';
-const $=id=>document.getElementById(id);
-const KEY='valley_geo_quest_profiles_v1';
-const defaultRecord=()=>({attempts:0,correct:0,bestStreak:0,sessions:0,stars:0,history:{},scores:{},lastSeen:{},grade:'6-8',theme:'night'});
-const readSaved=()=>{try {const x=JSON.parse(localStorage.getItem(KEY));return x&&typeof x==='object'?x:null}catch{return null}};
+// Valley Geography Quest V2 — local-only educational geography practice.
+const $ = id => document.getElementById(id);
+const KEY = 'valley_geo_quest_profiles_v1'; // Preserve V1 progress.
+const defaultRecord = () => ({attempts:0,correct:0,bestStreak:0,sessions:0,stars:0,history:{},scores:{},lastSeen:{},grade:'6-8',theme:'night'});
+const readSaved=()=>{try{const x=JSON.parse(localStorage.getItem(KEY));return x&&typeof x==='object'?x:null}catch{return null}};
 let saved=readSaved()||{active:'Explorer',people:{Explorer:defaultRecord()}};
-if(!saved.people ||!Object.keys(saved.people).length)saved={active:'Explorer',people:{Explorer:defaultRecord()}};
+if(!saved.people || !Object.keys(saved.people).length) saved={active:'Explorer',people:{Explorer:defaultRecord()}};
+if(!saved.people[saved.active]) saved.active=Object.keys(saved.people)[0];
 const player=()=>saved.people[saved.active];
 function persist(){try{localStorage.setItem(KEY,JSON.stringify(saved))}catch(e){console.warn('Local storage unavailable',e)}}
 const norm=s=>String(s||'').toLowerCase().replace(/\bst\.?\b/g,'saint').replace(/[^a-z0-9]/g,'').trim();
-const shuffle=a=>{const b=[...a];for(let i=b.length-1;i>0;i--){let j=Math.floor(Math.random()*(i+1));[b[i],b[j]]=[b[j],b[i]]}return b};
+const shuffle=a=>{const b=[...a];for(let i=b.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[b[i],b[j]]=[b[j],b[i]]}return b};
 const esc=s=>String(s).replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
 const make=(tag,txt,cls)=>{const x=document.createElement(tag);if(txt!=null)x.textContent=txt;if(cls)x.className=cls;return x};
-const flagUrl=ab=>`https://raw.githubusercontent.com/dodotdev/telco-dev-flags/master/flags/us/${ab.toLowerCase()}/${ab.toLowerCase()}_240x160.png`;
-let mode='locate',round=[],index=0,correct=0,wrong=0,streak=0,started=0,elapsed=0,timer=null,locked=false,activeName='',bankPick=null,options=[],pnwMarkers=[],shown=0,answering=false;
+const fmtTime=seconds=>`${Math.floor(Math.max(0,seconds)/60)}:${String(Math.floor(Math.max(0,seconds)%60)).padStart(2,'0')}`;
+let mode='locate',round=[],index=0,correct=0,wrong=0,streak=0,started=0,elapsed=0,timeLimit=0,mistakeLimit=0;
+let timer=null,advanceTimer=null,roundNonce=0,locked=false,finished=false,bankPick=null,options=[],pnwMarkers=[],practice=false;
 let uiStates={};
 function showModal(title,body,extra=''){$('modalTitle').textContent=title;$('modalBody').textContent=body;$('modalExtra').innerHTML=extra;$('modal').hidden=false}
 $('modalClose').onclick=()=>$('modal').hidden=true;
 function profileOptions(){const sel=$('profile');sel.replaceChildren();Object.keys(saved.people).forEach(n=>sel.add(new Option(n,n)));sel.value=saved.active;$('grade').value=player().grade||'6-8';$('theme').value=player().theme||'night';document.body.dataset.theme=$('theme').value;drawPassport()}
 $('profile').onchange=e=>{saved.active=e.target.value;persist();profileOptions();resetRound()};
 $('newPlayer').onclick=()=>{const name=prompt('Explorer nickname (no full student names):')?.trim().slice(0,22);if(!name)return;if(!saved.people[name])saved.people[name]=defaultRecord();saved.active=name;persist();profileOptions();resetRound()};
-$('grade').onchange=e=>{player().grade=e.target.value;persist();resetRound()};$('theme').onchange=e=>{player().theme=e.target.value;document.body.dataset.theme=e.target.value;persist()};
-$('region').onchange=()=>resetRound();$('length').onchange=()=>resetRound();
-$('helpButton').onclick=()=>showModal('How to play',MODES.find(m=>m.id===mode).detail+'\n\nEach correct answer scores 100 points. An incorrect answer reveals the location or fact so you can learn from it. Use Explorer mode for no-pressure study. Question history is saved in this browser.','<p>In Name Bank Match, select a word-bank tile and then click the glowing state. You can also drag a tile to the glowing state with a mouse.</p>');
-$('resetButton').onclick=()=>{if((correct+wrong)>0&&!confirm('Start a fresh round? Your current round score will reset; your overall history stays saved.'))return;resetRound()};
-$('fullscreenButton').onclick=async()=>{try{if(document.fullscreenElement){await document.exitFullscreen()}else{await $('map').parentElement.parentElement.requestFullscreen()}}catch{showModal('Fullscreen unavailable','Try the browser fullscreen shortcut (F11).')}};
-$('hintButton').onclick=()=>{if(!round[index])return;const q=round[index];let txt='';if(mode==='pnw'){txt=`Category: ${q.type}. The markers are approximate geographic reference points.`}else{txt=`Region: ${q.region}. ${mode==='capital'?'The capital is not necessarily the largest city.':'Think about neighboring states and U.S. regions.'}`}feedback(txt,'');};
-$('reveal').onclick=()=>{if(locked||mode==='study')return;checkAnswer(null,true)};
-$('next').onclick=()=>{if(!locked)return;index++;if(index>=round.length|| (mode==='sprint'&&elapsed>=90)){finishRound()}else loadQuestion()};
+$('grade').onchange=e=>{player().grade=e.target.value;persist();resetRound()};
+$('theme').onchange=e=>{player().theme=e.target.value;document.body.dataset.theme=e.target.value;persist()};
+$('region').onchange=resetRound;
+$('length').onchange=resetRound;
+$('playStyle').onchange=resetRound;
+$('helpButton').onclick=()=>showModal('How to play',MODES.find(m=>m.id===mode).detail+'\n\nChallenge has a time limit and a limited number of misses. Practice has unlimited misses and lets you retry a wrong choice. Your accuracy still reflects the attempts you make.','<p>Find the State advances automatically after a correct answer. For PNW Explorer, click the numbered marker; each symbol represents a city, waterway, or mountain.</p>');
+$('resetButton').onclick=()=>{if((correct+wrong)>0&&!finished&&!confirm('Start a fresh round? Your current round score resets; your overall history remains saved.'))return;resetRound()};
+$('fullscreenButton').onclick=async()=>{try{if(document.fullscreenElement){await document.exitFullscreen()}else await $('playPanel').requestFullscreen()}catch{showModal('Fullscreen unavailable','Try F11 to enter browser fullscreen.')}};
+$('hintButton').onclick=()=>{const q=round[index];if(!q||finished)return;if(mode==='pnw')feedback(`Look for the ${categoryLabel(q)} symbol. All map markers are approximate reference points.`,'');else feedback(`Region: ${q.region}. ${mode==='capital'?'The capital may not be its largest city.':'Use bordering states and nearby geographic features.'}`,'')};
+$('reveal').onclick=()=>{if(locked||finished||mode==='study')return;checkAnswer(null,true)};
+$('next').onclick=()=>{if(!locked||finished)return;advanceQuestion()};
 $('export').onclick=()=>{const blob=new Blob([JSON.stringify({nickname:saved.active,exported:new Date().toISOString(),...player()},null,2)],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='valley_geography_progress.json';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1500)};
-function modeList(){const root=$('modeButtons');root.replaceChildren();MODES.forEach(m=>{const b=make('button',null,'modeButton');b.dataset.mode=m.id;b.setAttribute('aria-current',String(m.id===mode));const name=make('span',m.label),icon=make('em',({'locate':'⌖','name':'⌨','bank':'▦','capital':'★','flags':'⚑','sprint':'⏱','pnw':'⛰','study':'◉'})[m.id]);b.append(name,icon);b.title=m.detail;b.onclick=()=>{mode=m.id;modeList();resetRound()};root.append(b)})}
-function mapSvg(){const paths=$('mapPaths');paths.replaceChildren();uiStates={};for(const s of STATES){const shape=STATE_SHAPES[s.ab];if(!shape)continue;const p=document.createElementNS('http://www.w3.org/2000/svg','path');p.setAttribute('d',shape.path);p.setAttribute('class','state');p.setAttribute('data-ab',s.ab);p.setAttribute('tabindex','0');p.setAttribute('role','button');p.setAttribute('aria-label',`Map location ${s.ab}`);p.setAttribute('fill-rule','evenodd');p.addEventListener('click',()=>stateClick(s.ab));p.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();stateClick(s.ab)}});paths.append(p);uiStates[s.ab]=p}}
+function modeList(){const root=$('modeButtons');root.replaceChildren();MODES.forEach(m=>{const b=make('button',null,'modeButton');b.dataset.mode=m.id;b.setAttribute('aria-current',String(m.id===mode));b.append(make('span',m.label),make('em',({'locate':'⌖','name':'⌨','bank':'▦','capital':'★','sprint':'⏱','pnw':'⛰','study':'◉'})[m.id]||'◉'));b.title=m.detail;b.onclick=()=>{mode=m.id;modeList();resetRound()};root.append(b)})}
+function mapSvg(){const paths=$('mapPaths');paths.replaceChildren();uiStates={};for(const s of STATES){const shape=STATE_SHAPES[s.ab];if(!shape)continue;const p=document.createElementNS('http://www.w3.org/2000/svg','path');p.setAttribute('d',shape.path);p.setAttribute('class','state');p.setAttribute('data-ab',s.ab);p.setAttribute('tabindex','0');p.setAttribute('role','button');p.setAttribute('aria-label',`Select ${s.name}`);p.setAttribute('fill-rule','evenodd');p.addEventListener('click',()=>stateClick(s.ab));p.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();stateClick(s.ab)}});paths.append(p);uiStates[s.ab]=p}}
 function visibleStates(){return STATES.filter(s=>$('region').value==='All'||s.region===$('region').value)}
-function chooseRound(){const qpool=mode==='pnw'?PNW_PLACES:visibleStates();const max=mode==='sprint'?Math.min(50,qpool.length):Math.min(+$('length').value,qpool.length);const hist=player().history[mode+'|'+$('region').value]||{};return shuffle(qpool).sort((a,b)=>(hist[a.name]||0)-(hist[b.name]||0)).slice(0,max)}
-function resetRound(){clearInterval(timer);timer=null;elapsed=0;started=Date.now();correct=wrong=streak=index=0;shown=0;locked=false;bankPick=null;round=chooseRound();$('region').disabled=['study','pnw'].includes(mode);$('length').disabled=['sprint','study'].includes(mode);const m=MODES.find(m=>m.id===mode);$('missionTag').textContent=mode==='pnw'?'PNW REGIONAL GEOGRAPHY':mode==='sprint'?'TIMED ATLAS RACE':'U.S. ATLAS · '+$('grade').value;$('missionTitle').textContent=m.label;$('missionDesc').textContent=m.detail;$('map').setAttribute('viewBox',mode==='pnw'?'63 43 167 147':'0 0 1100 660');$('mapNote').textContent=mode==='pnw'?'Marker points show approximate positions':'Alaska & Hawaii shown as insets';$('pins').replaceChildren();$('next').disabled=true;mapSvg();if(mode==='study'){questionStudy();}else loadQuestion();timer=setInterval(tick,250);paintScore();drawPassport();}
-function tick(){if(mode==='study')return;if(mode==='sprint'){elapsed=(Date.now()-started)/1000; if(elapsed>=90){elapsed=90;finishRound();return}}else{elapsed=(Date.now()-started)/1000}paintScore()}
-function paintScore(){$('score').textContent=String(correct*100);$('accuracy').textContent=correct+wrong?Math.round(correct/(correct+wrong)*100)+'%':'—';$('streak').textContent=String(streak);$('progress').textContent=`${Math.min(index+Number(locked),round.length)}/${round.length}`;$('time').textContent=mode==='study'?'—':mode==='sprint'?`${Math.max(0,Math.ceil(90-elapsed))}s`:`${Math.floor(elapsed/60)}:${String(Math.floor(elapsed%60)).padStart(2,'0')}`}
+function chooseRound(){const qpool=mode==='pnw'?PNW_PLACES:visibleStates();const max=mode==='sprint'?Math.min(50,qpool.length):Math.min(Number($('length').value),qpool.length);const hist=player().history[mode+'|'+$('region').value]||{};return shuffle(qpool).sort((a,b)=>(hist[a.name]||0)-(hist[b.name]||0)).slice(0,max)}
+function allowedMistakes(){const base=round.length<=10?4:round.length<=25?7:10;const adjustment=$('grade').value==='9-12'?2:$('grade').value==='6-8'?1:0;return Math.max(2,base-adjustment)}
+function allowedSeconds(){const base=round.length<=10?210:round.length<=25?450:800;const factor=$('grade').value==='3-5'?1.2:$('grade').value==='9-12'?.9:1;return Math.round(base*factor)}
+function resetRound(){roundNonce++;clearInterval(timer);timer=null;clearTimeout(advanceTimer);advanceTimer=null;
+ elapsed=0;started=Date.now();correct=wrong=streak=index=0;locked=false;finished=false;bankPick=null;round=chooseRound();practice=$('playStyle').value==='practice';
+ mistakeLimit=practice?Infinity:allowedMistakes();timeLimit=mode==='sprint'&&!practice?90:practice||mode==='study'?Infinity:allowedSeconds();
+ $('region').disabled=['study','pnw'].includes(mode);$('length').disabled=['sprint','study'].includes(mode);$('playStyle').disabled=mode==='study';
+ const m=MODES.find(m=>m.id===mode);$('missionTag').textContent=mode==='pnw'?'PNW REGIONAL GEOGRAPHY':mode==='sprint'?'TIMED ATLAS RACE':'U.S. ATLAS · '+$('grade').value;
+ $('missionTitle').textContent=m.label;$('missionDesc').textContent=m.detail;
+ $('map').setAttribute('viewBox',mode==='pnw'?'63 43 167 147':'0 0 1100 660');$('mapNote').textContent=mode==='pnw'?'Numbered choices · Dynamic map zoom':'Alaska & Hawaii shown as insets';$('mapLegendLeft').textContent=mode==='pnw'?'● Places  ▲ Peaks  ≋ Waterways':'◉ Tap a state';$('map').parentElement.classList.toggle('pnwArea',mode==='pnw');
+ $('pins').replaceChildren();$('next').disabled=true;$('modal').hidden=true;$('mapHUD').className='mapHUD';mapSvg();
+ if(mode==='study')questionStudy();else loadQuestion();
+ if(mode!=='study')timer=setInterval(tick,250);paintScore();drawPassport()}
+function tick(){if(finished||mode==='study')return;elapsed=(Date.now()-started)/1000;if(elapsed>=timeLimit){elapsed=timeLimit;finishRound('time');return}paintScore()}
+function paintScore(){const attempts=correct+wrong;const remaining=round.length-Math.min(index+(locked?1:0),round.length);
+ $('score').textContent=String(correct*100);$('accuracy').textContent=attempts?Math.round(correct/attempts*100)+'%':'—';$('streak').textContent=String(streak);
+ $('progress').textContent=`${Math.min(index+(locked?1:0),round.length)}/${round.length}`;
+ const countdown=Number.isFinite(timeLimit);const t=countdown?Math.ceil(Math.max(0,timeLimit-elapsed)):Math.floor(elapsed);
+ $('time').textContent=mode==='study'?'—':fmtTime(t);$('hudClock').textContent=finished?'DONE':mode==='study'?'—':fmtTime(t);
+ $('hudClockLabel').textContent=mode==='study'?'':finished?'ROUND COMPLETE':countdown?'TIME LEFT':'PRACTICE TIME';
+ $('hudRemaining').textContent=mode==='study'?'':`${remaining} LEFT / ${round.length}`;
+ $('hudLives').textContent=mode==='study'?'':practice?'NO MISTAKE LIMIT':`${Math.max(0,mistakeLimit-wrong)} MISSES LEFT`;
+ $('hudBar').style.width=mode==='study'?'100%':countdown?Math.max(0,100*(timeLimit-elapsed)/timeLimit)+'%':Math.min(100,100*(index+(locked?1:0))/Math.max(1,round.length))+'%';
+ $('mapHUD').className='mapHUD'+(mode==='study'?' study':finished?' done':countdown&&timeLimit-elapsed<=20?' urgent':'')}
 function feedback(text,type){const f=$('feedback');f.textContent=text;f.className='feedback'+(type?' '+type:'')}
 function cleanMap(){Object.values(uiStates).forEach(p=>p.setAttribute('class','state'));$('pins').replaceChildren()}
 function mark(ab,cls){uiStates[ab]?.classList.add(cls)}
-function questionStudy(){cleanMap();locked=false;$('instruction').textContent='FREE EXPLORATION';$('question').textContent='Click any state';$('subquestion').textContent='See its capital, location, region, flag, and fact in your Field Guide.';$('inputArea').replaceChildren();$('next').disabled=true;$('reveal').hidden=true;$('hintButton').hidden=true;feedback('Select a state on the map. No timer, no penalties.','')}
-function loadQuestion(){if(!round[index]){finishRound();return}cleanMap();locked=false;bankPick=null;const q=round[index];$('next').disabled=true;$('reveal').hidden=false;$('hintButton').hidden=false;$('instruction').textContent=`CHALLENGE ${index+1} OF ${round.length}`;$('inputArea').replaceChildren();if(mode!=='study'){$('fieldGuide').textContent='Solve the prompt, then review the correct answer and a fact here.'};if(mode==='locate'||mode==='sprint'){$('question').textContent=`Find ${q.name}`;$('subquestion').textContent='Click the state on the map.';}else if(mode==='name'){$('question').textContent='What state is highlighted?';$('subquestion').textContent='Type the name; spelling counts, but case does not.';mark(q.ab,'target');addTextAnswer();}else if(mode==='bank'){$('question').textContent='Name the highlighted state';$('subquestion').textContent='Choose or drag a name from the bank, then click the orange state.';mark(q.ab,'target');const distractors=shuffle(STATES.filter(x=>x.ab!==q.ab)).slice(0,3);options=shuffle([q,...distractors]);const area=$('inputArea');options.forEach(s=>{const b=make('button',s.name,'choice');b.draggable=true;b.dataset.name=s.name;b.onclick=()=>selectBank(s.name);b.addEventListener('dragstart',e=>{bankPick=s.name;e.dataTransfer.setData('text/plain',s.name);e.dataTransfer.effectAllowed='copy'});area.append(b)})}else if(mode==='capital'){$('question').textContent=`What is the capital of ${q.name}?`;$('subquestion').textContent=$('grade').value==='9-12'?'Type the state capital.':'Choose the correct capital.';mark(q.ab,'target');if($('grade').value==='9-12'){addTextAnswer()}else{const picks=shuffle([q,...shuffle(STATES.filter(x=>x.capital!==q.capital)).slice(0,3)]);options=picks;const area=$('inputArea');picks.forEach(s=>{const b=make('button',s.capital,'choice');b.onclick=()=>checkAnswer(s.capital);area.append(b)})}}else if(mode==='flags'){$('question').textContent='Which state flies this flag?';$('subquestion').textContent='Select the matching state name. Flag pictures need an internet connection.';const wrap=make('div',null,'flagCard'),img=document.createElement('img'),warn=make('small','');img.alt='U.S. state flag: identify the state';img.src=flagUrl(q.ab);img.onerror=()=>{img.hidden=true;warn.textContent='Flag image unavailable on this network. Skip this clue or switch to another mode.'};wrap.append(img,warn);$('inputArea').append(wrap);const picks=shuffle([q,...shuffle(STATES.filter(x=>x.ab!==q.ab)).slice(0,3)]);options=picks;for(const s of picks){const b=make('button',s.name,'choice');b.onclick=()=>checkAnswer(s.name);$('inputArea').append(b)}}else if(mode==='pnw'){const category=['City','Town','Capital','Metro','Mountain','Mountains','Pass','River','Lake','Water','Landmark'].includes(q.type)?q.type:'City';$('question').textContent=`Locate: ${q.name}`;$('subquestion').textContent=`Type: ${category} · Click its marker on the regional map.`;const distractors=shuffle(PNW_PLACES.filter(x=>x.name!==q.name&&((x.type===category)||['City','Town','Capital','Metro'].includes(x.type)&&['City','Town','Capital','Metro'].includes(category)))).slice(0,7);pnwMarkers=shuffle([q,...distractors]);renderPins()}
-feedback(mode==='sprint'?'Time is running — choose quickly!':'Take your time. Review what you learn after each attempt.','');paintScore()}
-function renderPins(){const g=$('pins');g.replaceChildren();for(const spot of pnwMarkers){const cir=document.createElementNS('http://www.w3.org/2000/svg','circle');cir.setAttribute('cx',spot.x);cir.setAttribute('cy',spot.y);cir.setAttribute('r','2.8');cir.setAttribute('class','pin');cir.dataset.name=spot.name;cir.setAttribute('tabindex','0');cir.setAttribute('role','button');cir.setAttribute('aria-label','Select map point');cir.addEventListener('click',()=>checkAnswer(spot.name));cir.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();checkAnswer(spot.name)}});g.append(cir)}}
-function addTextAnswer(){const inp=make('input');inp.className='answerInput';inp.autocomplete='off';inp.spellcheck=false;inp.placeholder=mode==='capital'?'Enter capital city':'Enter state name';inp.maxLength=48;inp.setAttribute('aria-label','Your answer');const btn=make('button','Check answer','primary');const onSubmit=()=>checkAnswer(inp.value);btn.onclick=onSubmit;inp.onkeydown=e=>{if(e.key==='Enter')onSubmit()};$('inputArea').append(inp,btn);setTimeout(()=>inp.focus(),30)}
-function selectBank(name){if(locked)return;bankPick=name;document.querySelectorAll('.choice').forEach(b=>b.classList.toggle('selected',b.dataset.name===name));feedback('Selected '+name+'. Now click the highlighted state.','')}
-$('map').addEventListener('dragover',e=>{if(mode==='bank')e.preventDefault()});$('map').addEventListener('drop',e=>{if(mode!=='bank'||locked)return;e.preventDefault();const name=e.dataTransfer.getData('text/plain')||bankPick;const el=e.target.closest?.('[data-ab]');if(el?.dataset.ab===round[index]?.ab&&name)checkAnswer(name)});
-function stateClick(ab){const s=BY_AB[ab];if(!s)return;if(mode==='study'){Object.values(uiStates).forEach(p=>p.classList.remove('target'));mark(ab,'target');showFact(s);feedback(`${s.name} · Capital: ${s.capital}`,'success');return}if(locked)return;const q=round[index];if(mode==='locate'||mode==='sprint')checkAnswer(s.name);else if(mode==='bank'){if(ab!==q.ab){feedback('Click the highlighted state after selecting a word-bank name.','error');return}if(!bankPick){feedback('First choose a name from the word bank.','error');return}checkAnswer(bankPick)}else if(mode==='pnw')return}
+function questionStudy(){cleanMap();locked=false;$('instruction').textContent='FREE EXPLORATION';$('question').textContent='Click any state';$('subquestion').textContent='Explore its capital, region, and geography facts. No time limit or penalties.';$('inputArea').replaceChildren();$('next').disabled=true;$('reveal').hidden=true;$('hintButton').hidden=true;feedback('Select a state on the map to learn about it.','')}
+function loadQuestion(){if(finished)return;if(!round[index]){finishRound('complete');return}cleanMap();locked=false;bankPick=null;const q=round[index];$('next').disabled=true;$('reveal').hidden=false;$('hintButton').hidden=false;$('instruction').textContent=`CHALLENGE ${index+1} OF ${round.length}`;$('inputArea').replaceChildren();$('fieldGuide').textContent='Answer the prompt. The correct state or landmark will be highlighted afterward.';
+ if(mode==='locate'||mode==='sprint'){$('question').textContent=`Find ${q.name}`;$('subquestion').textContent='Click its location. Correct answers automatically advance.';}
+ else if(mode==='name'){$('question').textContent='What state is highlighted?';$('subquestion').textContent='Type the state name. Case does not matter.';mark(q.ab,'target');addTextAnswer()}
+ else if(mode==='bank'){$('question').textContent='Name the highlighted state';$('subquestion').textContent='Select a name, then click the glowing state.';mark(q.ab,'target');options=shuffle([q,...shuffle(STATES.filter(x=>x.ab!==q.ab)).slice(0,3)]);for(const s of options){const b=make('button',s.name,'choice');b.draggable=true;b.dataset.name=s.name;b.onclick=()=>selectBank(s.name);b.addEventListener('dragstart',e=>{bankPick=s.name;e.dataTransfer.setData('text/plain',s.name);e.dataTransfer.effectAllowed='copy'});$('inputArea').append(b)}}
+ else if(mode==='capital'){$('question').textContent=`What is the capital of ${q.name}?`;$('subquestion').textContent=$('grade').value==='9-12'?'Type its capital.':'Choose the correct capital.';mark(q.ab,'target');if($('grade').value==='9-12')addTextAnswer();else{options=shuffle([q,...shuffle(STATES.filter(x=>x.capital!==q.capital)).slice(0,3)]);for(const s of options){const b=make('button',s.capital,'choice');b.onclick=()=>checkAnswer(s.capital);$('inputArea').append(b)}}}
+ else if(mode==='pnw'){$('question').textContent=`Find ${q.name}`;$('subquestion').textContent=`${categoryLabel(q)} · Select its numbered marker. The map zooms in to the choices.`;pnwMarkers=choosePNWMarkers(q);renderPins()}
+ feedback(practice?'Practice mode — unlimited mistakes. Try again if you miss.':'Challenge mode — watch your time and remaining mistakes.','');paintScore()}
+const PNW_FAMILY={City:'place',Town:'place',Capital:'place',Metro:'place',Mountain:'mountain',Mountains:'mountain',Pass:'mountain',River:'water',Lake:'water',Water:'water',Landmark:'water'};
+const family=q=>PNW_FAMILY[q.type]||'place';
+const categoryLabel=q=>family(q)==='mountain'?'Mountain / mountain pass':family(q)==='water'?'Waterway / water feature':'City / community';
+const gap=(a,b)=>Math.hypot(a.x-b.x,a.y-b.y);
+function choosePNWMarkers(q){
+ const count=$('grade').value==='3-5'?4:$('grade').value==='6-8'?5:6;
+ const candidates=shuffle(PNW_PLACES.filter(x=>x.name!==q.name));
+ const same=candidates.filter(x=>family(x)===family(q));
+ const other=candidates.filter(x=>family(x)!==family(q));
+ const result=[q];
+ for(const minGap of [17,12,9]){
+   for(const list of [same,other]){
+     for(const spot of list){if(result.length>=count)break;if(result.some(x=>x.name===spot.name))continue;if(result.every(x=>gap(x,spot)>=minGap))result.push(spot)}
+     if(result.length>=count)break;
+   }
+   if(result.length>=count)break;
+ }
+ // Never produce a one-answer question; even close-quarters PNW locations offer at least four choices.
+ if(result.length<count){for(const spot of candidates){if(result.length>=count)break;if(!result.some(x=>x.name===spot.name))result.push(spot)}}
+ return shuffle(result.slice(0,count))
+}
+function pnwView(){if(!pnwMarkers.length){$('map').setAttribute('viewBox','63 43 167 147');return}
+ const xs=pnwMarkers.map(p=>p.x),ys=pnwMarkers.map(p=>p.y);let minX=Math.min(...xs),maxX=Math.max(...xs),minY=Math.min(...ys),maxY=Math.max(...ys);
+ const w=Math.min(167,Math.max(64,maxX-minX+32));const h=Math.min(147,Math.max(62,maxY-minY+32));
+ const midX=(minX+maxX)/2,midY=(minY+maxY)/2;
+ const x=Math.max(63,Math.min(230-w,midX-w/2)),y=Math.max(43,Math.min(190-h,midY-h/2));
+ $('map').setAttribute('viewBox',`${x.toFixed(1)} ${y.toFixed(1)} ${w.toFixed(1)} ${h.toFixed(1)}`)
+}
+function regionNode(tag){return document.createElementNS('http://www.w3.org/2000/svg',tag)}
+function renderPins(){pnwView();const g=$('pins');g.replaceChildren();const key=make('div',null,'markerChoices');
+ pnwMarkers.forEach((spot,i)=>{
+ const grp=regionNode('g'),outer=regionNode('circle'),inner=regionNode('circle'),num=regionNode('text'),icon=regionNode('text'),hit=regionNode('circle');
+ const f=family(spot);grp.setAttribute('class',`regionPin ${f}`);grp.setAttribute('role','button');grp.setAttribute('tabindex','0');grp.setAttribute('aria-label',`Location ${i+1}, ${categoryLabel(spot)}`);grp.setAttribute('transform',`translate(${spot.x} ${spot.y})`);
+ outer.setAttribute('r','5');outer.setAttribute('class','pinBorder');inner.setAttribute('r','4');inner.setAttribute('class','pinCore');
+ num.setAttribute('class','pinNumber');num.setAttribute('y','.5');num.textContent=String(i+1);
+ icon.setAttribute('class','pinIcon');icon.setAttribute('y','-6.1');icon.textContent=f==='mountain'?'▲':f==='water'?'≈':'●';
+ hit.setAttribute('r','6.7');hit.setAttribute('class','hitTarget');
+ grp.append(outer,inner,num,icon,hit);grp.addEventListener('click',()=>checkAnswer(spot.name));grp.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();checkAnswer(spot.name)}});grp.dataset.name=spot.name;g.append(grp);
+ const k=make('span',`${i+1} ${f==='mountain'?'▲ Peak':f==='water'?'≈ Water':'● Place'}`,'markerKey');key.append(k);
+ });$('inputArea').append(key)
+}
+function addTextAnswer(){const inp=make('input');inp.className='answerInput';inp.autocomplete='off';inp.spellcheck=false;inp.placeholder=mode==='capital'?'Enter capital city':'Enter state name';inp.maxLength=48;inp.setAttribute('aria-label','Your answer');const btn=make('button','Check answer','primary');const submit=()=>checkAnswer(inp.value);btn.onclick=submit;inp.onkeydown=e=>{if(e.key==='Enter')submit()};$('inputArea').append(inp,btn);setTimeout(()=>{if(document.contains(inp))inp.focus()},40)}
+function selectBank(name){if(locked||finished)return;bankPick=name;document.querySelectorAll('.choice').forEach(b=>b.classList.toggle('selected',b.dataset.name===name));feedback('Selected '+name+'. Now click the highlighted state.','')}
+$('map').addEventListener('dragover',e=>{if(mode==='bank')e.preventDefault()});
+$('map').addEventListener('drop',e=>{if(mode!=='bank'||locked||finished)return;e.preventDefault();const name=e.dataTransfer.getData('text/plain')||bankPick;const el=e.target.closest?.('[data-ab]');if(el?.dataset.ab===round[index]?.ab&&name)checkAnswer(name)});
+function stateClick(ab){const s=BY_AB[ab];if(!s||finished)return;if(mode==='study'){Object.values(uiStates).forEach(p=>p.classList.remove('target'));mark(ab,'target');showFact(s);feedback(`${s.name} · Capital: ${s.capital}`,'success');return}
+ if(locked||mode==='pnw')return;const q=round[index];if(!q)return;
+ if(mode==='locate'||mode==='sprint')checkAnswer(s.name);
+ else if(mode==='bank'){if(ab!==q.ab){feedback('Click the highlighted state after selecting a name.','error');return}if(!bankPick){feedback('Choose a name from the word bank first.','error');return}checkAnswer(bankPick)}
+}
 function actualAnswer(){const q=round[index];return mode==='capital'?q.capital:q.name}
-function showFact(s){const out=$('fieldGuide');out.replaceChildren();const img=make('img');img.src=flagUrl(s.ab);img.alt=`Flag of ${s.name}`;img.onerror=()=>img.remove();out.append(img);const header=make('div',s.name,'facttitle');out.append(header);for(const t of [`Capital: ${s.capital}`,`Postal abbreviation: ${s.ab}`,`Region: ${s.region}`,s.fact])out.append(make('div',t,'factline'))}
-function checkAnswer(value,skip=false){if(locked||mode==='study'||!round[index])return;const q=round[index];const ans=actualAnswer();if(!skip&&!String(value||'').trim()){feedback('Enter an answer first, or click Reveal / Skip.','error');return}const pass=!skip&&norm(value)===norm(ans);locked=true;$('next').disabled=false;correct+=Number(pass);wrong+=Number(!pass);streak=pass?streak+1:0;const rec=player();rec.attempts++;rec.correct+=Number(pass);rec.bestStreak=Math.max(rec.bestStreak,streak);const hkey=mode+'|'+$('region').value;rec.history[hkey]??={};rec.history[hkey][q.name]=(rec.history[hkey][q.name]||0)+1;rec.lastSeen[q.name]=Date.now();if(mode==='pnw'){const pin=[...document.querySelectorAll('.pin')];pin.forEach(p=>{if(p.dataset.name===q.name)p.classList.add('good');else if(p.dataset.name===value&&!pass)p.classList.add('bad')});const lbl=document.createElementNS('http://www.w3.org/2000/svg','text');lbl.setAttribute('x',q.x+4);lbl.setAttribute('y',q.y-3);lbl.setAttribute('class','pinLabel');lbl.textContent=q.name;$('pins').append(lbl);$('fieldGuide').textContent=`${q.name} · ${q.type} · Shown at an approximate map location.`}else{mark(q.ab,'good');if((mode==='locate'||mode==='sprint')&&!pass){const state=STATES.find(s=>s.name===value);if(state)mark(state.ab,'bad')}showFact(q)}document.querySelectorAll('.choice').forEach(b=>{b.disabled=true;if(norm(b.textContent)===norm(ans))b.classList.add('correct');if(norm(b.textContent)===norm(value)&&!pass)b.classList.add('wrong')});document.querySelectorAll('input.answerInput').forEach(inp=>inp.disabled=true);feedback(pass?`Correct! ${ans}. +100 points.`:`${skip?'Skipped.':'Not quite.'} The answer is ${ans}.`,` ${pass?'success':'error'}`.trim());persist();paintScore();drawPassport();if(mode==='sprint'&&elapsed<90){setTimeout(()=>{if(locked&&mode==='sprint'){index++;if(index>=round.length)finishRound();else loadQuestion()}},650)}}
-function finishRound(){if(timer){clearInterval(timer);timer=null}if(mode==='study')return;locked=true;$('next').disabled=true;const rec=player();rec.sessions++;const pct=(correct+wrong)?Math.round(100*correct/(correct+wrong)):0;const key=mode+'|'+$('region').value;rec.scores[key]=Math.max(rec.scores[key]||0,correct*100);let stars=pct>=95?3:pct>=80?2:pct>=60?1:0;rec.stars+=stars;persist();drawPassport();const msg=`${correct} correct · ${wrong} missed · ${pct}% accuracy · ${Math.round(elapsed)} seconds. ${stars?'You earned '+stars+' passport star'+(stars>1?'s':'')+'!':'Keep practicing to earn passport stars.'}`;$('question').textContent='Round complete!';$('subquestion').textContent=msg;feedback('Choose New round for another challenge, or select a different mode.','success');showModal(`${correct*100} points — Round complete`,msg,`<div style="font-size:30px;color:#ffd47c;text-align:center">${'★'.repeat(stars)}${'☆'.repeat(3-stars)}</div>`);if(stars===3)celebrate()}
+function showFact(s){const out=$('fieldGuide');out.replaceChildren();out.append(make('div',s.name,'facttitle'));for(const line of [`Capital: ${s.capital}`,`Postal abbreviation: ${s.ab}`,`Region: ${s.region}`,s.fact])out.append(make('div',line,'factline'))}
+function setQuestionHistory(q){const rec=player();const hkey=mode+'|'+$('region').value;rec.history[hkey]??={};rec.history[hkey][q.name]=(rec.history[hkey][q.name]||0)+1;rec.lastSeen[q.name]=Date.now()}
+function highlightAnswer(q,value,pass,showCorrect){if(mode==='pnw'){
+ for(const el of document.querySelectorAll('.regionPin')){if(el.dataset.name===q.name&&showCorrect)el.classList.add('good');else if(el.dataset.name===value&&!pass)el.classList.add('bad')}
+ if(showCorrect){const lbl=regionNode('text');lbl.setAttribute('x',q.x+7);lbl.setAttribute('y',q.y-4);lbl.setAttribute('class','pinLabel');lbl.textContent=q.name;$('pins').append(lbl)}
+ if(showCorrect)$('fieldGuide').textContent=`${q.name} · ${q.type}. Approximate learning map location.`
+ }else if(showCorrect){mark(q.ab,'good');if((mode==='locate'||mode==='sprint')&&!pass){const bad=STATES.find(s=>s.name===value);if(bad)mark(bad.ab,'bad')}showFact(q)}
+ document.querySelectorAll('.choice').forEach(b=>{if(showCorrect)b.disabled=true;if(showCorrect&&norm(b.textContent)===norm(actualAnswer()))b.classList.add('correct');if(norm(b.textContent)===norm(value)&&!pass)b.classList.add('wrong')});
+ if(showCorrect)document.querySelectorAll('.answerInput').forEach(inp=>inp.disabled=true)
+}
+function scheduleAdvance(delay){clearTimeout(advanceTimer);const nonce=roundNonce;advanceTimer=setTimeout(()=>{if(nonce===roundNonce&&locked&&!finished)advanceQuestion()},delay)}
+function checkAnswer(value,skip=false){if(locked||finished||mode==='study'||!round[index])return;const q=round[index],ans=actualAnswer();if(!skip&&!String(value||'').trim()){feedback('Enter or choose an answer first, or select Reveal / Skip.','error');return}
+ const pass=!skip&&norm(value)===norm(ans);const rec=player();rec.attempts++;rec.correct+=Number(pass);wrong+=Number(!pass);correct+=Number(pass);streak=pass?streak+1:0;rec.bestStreak=Math.max(rec.bestStreak,streak);
+ // Practice: a wrong answer may be tried again without using a life or ending the round.
+ if(practice&&!pass&&!skip){highlightAnswer(q,value,false,false);feedback(`Not quite. Try again — there is no mistake limit in Practice.`, 'error');persist();paintScore();drawPassport();return}
+ locked=true;$('next').disabled=false;setQuestionHistory(q);highlightAnswer(q,value,pass,true);persist();paintScore();drawPassport();
+ feedback(pass?`Correct! ${ans}. +100 points.`:`${skip?'Skipped.':'Not quite.'} The correct answer is ${ans}.`,pass?'success':'error');
+ if(!practice&&wrong>=mistakeLimit){scheduleAdvance(1200);return}
+ if(['locate','sprint','pnw'].includes(mode)){scheduleAdvance(pass?760:1200)}
+}
+function advanceQuestion(){if(finished||!locked)return;clearTimeout(advanceTimer);advanceTimer=null;index++;
+ if(!practice&&wrong>=mistakeLimit){finishRound('mistakes');return}
+ if(index>=round.length){finishRound('complete');return}
+ if(elapsed>=timeLimit){finishRound('time');return}
+ loadQuestion()}
+function finishRound(reason='complete'){
+ if(finished)return;finished=true;clearInterval(timer);timer=null;clearTimeout(advanceTimer);advanceTimer=null;locked=true;$('next').disabled=true;
+ const rec=player();if(mode==='study')return;rec.sessions++;
+ const attempts=correct+wrong,pct=attempts?Math.round(correct/attempts*100):0;
+ const key=mode+'|'+$('region').value;rec.scores[key]=Math.max(rec.scores[key]||0,correct*100);
+ const stars=pct>=95?3:pct>=80?2:pct>=60?1:0;rec.stars+=stars;persist();drawPassport();
+ const head=reason==='mistakes'?'Mistake limit reached':reason==='time'?'Time is up!':'Round complete!';
+ const used=Math.round(elapsed);const msg=`${correct} correct · ${wrong} mistakes · ${pct}% accuracy · ${fmtTime(used)} played. ${stars?`You earned ${stars} passport star${stars===1?'':'s'}!`:'Keep practicing to earn passport stars.'}`;
+ $('question').textContent=head;$('subquestion').textContent=msg;$('inputArea').replaceChildren();feedback('Select New round to try again, or choose another practice mode.','success');paintScore();
+ showModal(`${correct*100} points — ${head}`,msg,`<div style="font-size:30px;color:#ffd47c;text-align:center">${'★'.repeat(stars)}${'☆'.repeat(3-stars)}</div>`);if(stars===3)celebrate()
+}
 function celebrate(){const el=$('confetti');el.replaceChildren();for(let i=0;i<45;i++){const s=make('span',null,'flake');s.style.left=Math.random()*100+'%';s.style.background=['#4de2b3','#ffd071','#7bb9ff','#f9a4aa'][i%4];s.style.animationDelay=Math.random()*.5+'s';el.append(s)}setTimeout(()=>el.replaceChildren(),2600)}
-function drawPassport(){const p=player();$('passport').innerHTML=`<strong>${esc(saved.active)}</strong><div>Correct responses: <b>${p.correct||0}</b> / ${p.attempts||0}</div><div>Finished sessions: <b>${p.sessions||0}</b></div><div>Longest streak: <b>${p.bestStreak||0}</b></div><div>Passport stars: <b>${p.stars||0} ★</b></div><div>Try all eight modes to build your geography skills.</div>`}
+function drawPassport(){const p=player();$('passport').innerHTML=`<strong>${esc(saved.active)}</strong><div>Correct responses: <b>${p.correct||0}</b> / ${p.attempts||0}</div><div>Finished sessions: <b>${p.sessions||0}</b></div><div>Longest streak: <b>${p.bestStreak||0}</b></div><div>Passport stars: <b>${p.stars||0} ★</b></div><div>Play multiple modes to strengthen geography knowledge.</div>`}
 modeList();profileOptions();resetRound();

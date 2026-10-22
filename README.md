@@ -1,61 +1,60 @@
-# Valley Geography Quest — Version 1
+# Valley Geography Quest — V2: Timed Challenge and PNW Map Improvements
 
-A standalone, lightweight geography learning game for the Naches Learning Hub. Students can locate and type U.S. states, match state names from a word bank, identify state capitals, practice from state flags, race a 90-second clock, study individual state facts, and explore map landmarks in Washington and the Pacific Northwest.
+A lightweight geography game for the Naches Learning Hub. No build system or third-party JavaScript is needed.
 
-## GitHub repository
+## Major improvements from Version 1
 
-- **Name:** `valley-geography-quest`
-- **Description:** `Interactive U.S. geography challenges with all 50 states, capitals, flag matching, timed map races, Pacific Northwest landmarks, and saved student progress.`
-- **Expected site:** `https://jkramer-cloud.github.io/valley-geography-quest/`
+- **Find the State** recognizes a correct map click, gives 100 points, and automatically advances after a brief visual highlight. The 90-second sprint also advances without requiring the Next button.
+- A **large timer, number of questions remaining, and mistakes remaining** are permanently visible in an uncluttered strip above the map. Students receive a clear **Round Complete**, **Time Is Up**, or **Mistake Limit Reached** summary.
+- A **Play Style** selector has two modes:
+  - **Challenge:** Countdown plus a limited number of incorrect answers before the round ends; allowances depend on the selected grade range and round length.
+  - **Practice:** No deadline or mistake limit. Wrong answers can be retried, and accuracy still reflects the number of correct and incorrect attempts.
+- Final results report correct answers, mistakes, accuracy percentage, points, and time.
+- **PNW Explorer** has numbered place markers with visible categories for communities, mountainous terrain, and waterways. It zooms dynamically to the choices. The generator supplies 4–6 options and prevents markers from appearing too close together.
+- **State Flag Match** has been removed from the menu due to external image availability problems and classroom feedback. State Explorer no longer depends on flag image requests.
+- Existing nickname profiles, scores, streaks, and progress use the same browser storage key as V1. Data is not synchronized across devices.
 
-## Files to upload to the repository root
+## Current game modes
 
-- `index.html` — interface and accessibility labels
-- `styles.css` — three visual themes and responsive layouts
-- `data.js` — curated capitals, regions, state facts, gameplay modes
-- `map-data.js` — embedded 50-state vector shapes and PNW landmark locations
-- `game.js` — questions, game controls, progress, scores, timers
+1. Find the State — click the named state
+2. Type the State — type the name of the highlighted state
+3. Name Bank Match — use a word bank for a highlighted state
+4. Capital Challenge — multiple choice for younger grades; typed capitals for grades 9–12
+5. 90-Second Map Sprint — locate states quickly
+6. PNW Explorer — approximate locations of communities, mountains, waterways and landmarks
+7. State Explorer — free study with no mistakes or time limits
 
-Upload exactly these five files to the root of the GitHub repository. Do not upload the ZIP itself. In GitHub Pages settings, deploy the `main` branch from `/(root)`.
+## Example challenge allowances
 
-This is a purely static site: no server, API keys, third-party JavaScript, mapping service, Google sign-in, or student accounts are needed. The map is stored locally; only flag images are fetched from an optional external source. If images are blocked by a school network, flag challenges display a notice and the other practice modes continue to function.
+| Grade range | 10 questions | 25 questions | 50 questions |
+|---|---:|---:|---:|
+| Grades 3–5 | 4 mistakes | 7 mistakes | 10 mistakes |
+| Grades 6–8 | 3 mistakes | 6 mistakes | 9 mistakes |
+| Grades 9–12 | 2 mistakes | 5 mistakes | 8 mistakes |
 
-## Eight gameplay choices
+The countdown adjusts to grade band and question count. The 90-second sprint remains fixed at 90 seconds in Challenge mode. PNW rounds cap at the number of available unique locations (28 in this build).
 
-1. Find the State — read a state name and click its location.
-2. Type the State — identify the highlighted state by typing its name.
-3. Name Bank Match — select or drag a name from a four-item bank to the highlighted state.
-4. Capital Challenge — choose from four capitals (grades 3–8) or type the capital (grades 9–12).
-5. State Flag Match — identify a real state flag; requires network access to remote images.
-6. 90-Second Map Sprint — locate as many states as possible in a timed round.
-7. PNW Explorer — locate regional cities, rivers, mountains, and landmarks, with approximate marker locations.
-8. State Explorer — click any state to see its capital, region, flag, and a factual note.
+## Files to upload
 
-Modes have region filters (All, West, Midwest, South, Northeast) and 10-, 25-, or 50-question rounds where applicable. Students can select grade-range settings; the initial differentiated challenge is mainly question presentation (multiple choice vs. typed capital), not a full separate grade-level curriculum.
+Upload or replace all **five** root-level website files in the existing `valley-geography-quest` GitHub repository:
 
-## Saved progress and privacy
+- `index.html`
+- `styles.css`
+- `data.js`
+- `map-data.js`
+- `game.js`
 
-- Stores player nicknames and overall progress in the browser's localStorage.
-- Remembers per-mode and region-specific clue exposure and prioritizes states seen less often.
-- Tracks correct/incorrect answers, streaks, completed sessions, and passport stars.
-- Provides a JSON progress export for teacher review.
-- Does not sync across Chromebooks. Clearing browser data or private browsing may remove records. Encourage nicknames, not real student names.
+**Do not upload these files to the main Learning Hub repository.** That hub already points to the existing website at `https://jkramer-cloud.github.io/valley-geography-quest/`.
 
-## Intended educational use
+No Learning Hub update is needed: this release does not change the game's URL or the Hub category.
 
-These are original questions intended to support mapping and geographic literacy. They do not establish standards mastery. Capitals and facts should be periodically reviewed for accuracy as materials are expanded.
+## Limitations
 
-## Map and flag data sources
+- PNW landmark points are **approximate classroom map locations**, not surveyed GPS positions; waterways and mountain ranges are represented by points rather than full geographic shapes.
+- State shapes are simplified and Alaska/Hawaii are shown as cartographic insets.
+- Profiles save only in this browser's local storage. Private windows, cleared browser data, and different school devices do not share progress.
+- This is instructional practice, not a formal Washington standards assessment.
 
-- U.S. state shapes were programmatically simplified from the `UScounties` boundaries distributed in `mpl_toolkits.basemap_data`, derived from U.S. Census mapping data. Alaska and Hawaii are **repositioned as schematic insets**; the map is not suitable for measurement.
-- A separately available U.S. atlas dataset is the Census-derived [TopoJSON U.S. Atlas](https://github.com/topojson/us-atlas), with its own license. This game does not download or require that package at runtime.
-- Flag images, where accessible, are requested from [telco-dev-flags](https://github.com/dodotdev/telco-dev-flags). The game does not store or sublicense these images. Flag availability and official design updates are externally dependent.
-- Regional point coordinates are approximate locators for gameplay, not surveyed boundaries or engineering locations.
+## Validation
 
-## Future development roadmap
-
-- Expand the U.S. question bank with state symbols, rivers, landforms, geographic regions, and teacher-reviewed facts.
-- Build grade 5–8 and 9–12 geography mission packs with evidence, short readings, and short-response questions.
-- Bundle reviewed current state flags locally for fully offline practice if licensing and file sizes permit.
-- Create a separate **World Atlas Expedition** using country polygons, flags, capital cities, continents, and country-specific source data.
-- Expand the Pacific Northwest map to Washington counties, Cascade volcanoes, rivers, tribal geography, and Yakima Valley historical/cultural content with appropriate review.
+The update was checked with automated Chromium interactions for all seven modes, including correct clicks, automatic advancement, wrong-answer retries, mistake limit, 90-second expiration, and multiple PNW marker choices. PNW marker separation and minimum choice counts were also checked across all 28 locations and three grade ranges. Classroom device testing is still advised.

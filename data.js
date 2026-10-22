@@ -53,12 +53,11 @@ WY|Wyoming|Cheyenne|West|Yellowstone National Park extends into Wyoming`;
 const STATES=STATE_ROWS.split('\n').map(line=>{let [ab,name,capital,region,fact]=line.split('|');return {ab,name,capital,region,fact}});
 const BY_AB=Object.fromEntries(STATES.map(s=>[s.ab,s]));
 const MODES=[
-{id:'locate',label:'Find the State',detail:'Read the name. Click its location on the map.'},
+{id:'locate',label:'Find the State',detail:'Find the prompted state. Each correct click awards points and advances automatically.'},
 {id:'name',label:'Type the State',detail:'A state lights up. Type its name.'},
 {id:'bank',label:'Name Bank Match',detail:'Choose a name from the bank, then click the glowing state.'},
 {id:'capital',label:'Capital Challenge',detail:'Name the capital of a highlighted state.'},
-{id:'flags',label:'State Flag Match',detail:'Identify the state from a real flag picture (internet needed).'},
 {id:'sprint',label:'90-Second Map Sprint',detail:'Locate as many states as possible before time runs out.'},
-{id:'pnw',label:'PNW Explorer',detail:'Find cities, rivers, peaks, and landmarks in our region.'},
-{id:'study',label:'State Explorer',detail:'Tap any state to reveal its capital, region, and facts.'}
+{id:'pnw',label:'PNW Explorer',detail:'Identify numbered map markers for cities, mountains, rivers, and landmarks. The map zooms to the choices.'},
+{id:'study',label:'State Explorer',detail:'Tap any state to reveal its capital, region, and facts; no pressure or penalties.'}
 ];
