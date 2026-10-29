@@ -51,34 +51,23 @@ button.start-round{font-size:17px;padding:15px 22px;white-space:nowrap;box-shado
  .map-area svg{min-width:0}
 }
 
-/* Sidebar settings: one readable column at desktop sidebar widths.
-   The earlier four-column rule squeezed the heading and six selects. */
-.sidePanel{
-  grid-template-columns:minmax(0,1fr);
-  gap:12px;
-}
-.sidePanel>strong{
-  display:block;
-  grid-column:1/-1;
-  font-size:15px;
-  line-height:1.35;
-  padding-bottom:3px;
-}
-.sidePanel label{
-  min-width:0;
-  width:100%;
-  overflow-wrap:break-word;
-}
-.sidePanel select{
-  display:block;
-  width:100%;
-  min-width:0;
-  text-overflow:ellipsis;
-}
-/* When the sidebar becomes full width, two columns are comfortable. */
-@media(max-width:940px){
-  .sidePanel{grid-template-columns:repeat(2,minmax(0,1fr))}
-}
-@media(max-width:390px){
-  .sidePanel{grid-template-columns:minmax(0,1fr)}
-}
+/* Valley Geography Quest V4 — region focus, East Coast magnification, and timed records */
+.map-area{position:relative}
+.mapZoomControls{position:absolute;right:12px;top:72px;z-index:12;display:flex;flex-wrap:wrap;justify-content:flex-end;gap:5px;max-width:min(96%,475px);padding:6px;border-radius:11px;background:rgba(7,24,40,.86);backdrop-filter:blur(8px);border:1px solid rgba(172,214,241,.25);box-shadow:0 4px 15px rgba(0,0,0,.24)}
+.mapZoomButton{border:1px solid rgba(156,204,225,.42);color:#f2f9ff;background:#163c55;border-radius:7px;padding:6px 9px;font-size:.76rem;font-weight:750;cursor:pointer;min-height:32px;white-space:nowrap}
+.mapZoomButton.selected,.mapZoomButton:hover:not(:disabled){background:#f3c76f;border-color:#f3c76f;color:#132438}
+.mapZoomButton:disabled{opacity:.4;cursor:not-allowed}
+#map .state.outside-region{opacity:.35}
+#map .state.outside-region:hover{opacity:.85}
+.recordPanel{background:linear-gradient(150deg,rgba(16,53,75,.96),rgba(10,31,49,.98));border:1px solid rgba(116,178,207,.4);border-radius:18px;padding:19px 22px;margin-top:20px;box-shadow:0 10px 25px rgba(0,0,0,.13)}
+.recordHead{display:flex;justify-content:space-between;align-items:flex-start;gap:15px;flex-wrap:wrap}.recordHead h3{margin:5px 0 12px;font-size:1.13rem;color:var(--text,#eaf5ff)}.recordContext{font-size:.75rem;color:#bcd8e8;max-width:410px;line-height:1.5}.recordSummary{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:9px;margin:8px 0 15px}.recordSummary>div{padding:12px;background:rgba(155,216,244,.08);border:1px solid rgba(170,220,242,.16);border-radius:11px}.recordSummary small{display:block;color:#bcdbeb;font-size:.68rem;font-weight:750;letter-spacing:.04em}.recordSummary strong{display:block;font-size:1.25rem;color:#ffdd8c;margin-top:5px}.recordTableWrap{max-width:100%;overflow-x:auto}.recordTable{border-collapse:collapse;width:100%;font-size:.83rem;min-width:420px}.recordTable th,.recordTable td{text-align:left;border-bottom:1px solid rgba(182,223,239,.13);padding:8px 6px}.recordTable th{color:#b8d5e7}.recordTable td{color:#f0f7fc}.recordHistory p,.recordPrivacy{color:#c2d9e9;font-size:.8rem;line-height:1.5}.recordPrivacy{margin:12px 0 0}
+@media(max-width:690px){.mapZoomControls{position:relative;right:auto;top:auto;margin:6px 6px 0;justify-content:center;max-width:none}.mapZoomButton{font-size:.7rem;padding:6px 7px}.recordPanel{padding:15px}.recordSummary{grid-template-columns:repeat(2,minmax(0,1fr))}}
+
+/* Keep setup labels readable in the narrow desktop sidebar. */
+@media(min-width:941px){.sidePanel{grid-template-columns:minmax(0,1fr)}}
+/* Keep navigation outside the clickable state area. */
+.mapZoomControls{position:relative;right:auto;top:auto;margin:6px 7px 0 auto;width:max-content;max-width:calc(100% - 14px);box-shadow:none}
+.mapHUD{top:60px}
+.map-area.pnwArea .mapZoomControls{display:none}
+.map-area.pnwArea .mapHUD{top:12px}
+@media(max-width:690px){.mapZoomControls{max-width:calc(100% - 12px);margin:6px 6px 0;justify-content:center;width:auto}}
